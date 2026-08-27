@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { postXml } from '@/lib/novexco-client';
+import { postXml, redactXml } from '@/lib/novexco-client';
 import { parseRecordList } from '@/lib/novexco-adapter';
 import { buildConfirmationXml } from '@/lib/requests';
 
@@ -31,8 +31,8 @@ export async function POST(request: Request) {
       pending: !parsed.fault && parsed.rows.length === 0,
       ms: raw.ms,
       status: raw.status,
-      requestXml: xml,
-      rawXml: raw.xml,
+      requestXml: redactXml(xml),
+      rawXml: redactXml(raw.xml),
     },
     { status: parsed.fault ? 502 : 200 }
   );

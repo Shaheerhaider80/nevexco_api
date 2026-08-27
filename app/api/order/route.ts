@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { postXml } from '@/lib/novexco-client';
+import { postXml, redactXml } from '@/lib/novexco-client';
 import { parseOrderAck } from '@/lib/novexco-adapter';
 import { buildOrderXml, type OrderInput } from '@/lib/requests';
 
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   if (body.confirm !== true) {
     return NextResponse.json({
       dryRun: true,
-      requestXml: xml,
+      requestXml: redactXml(xml),
       note: 'Nothing was sent. Set confirm: true to submit this order to Novexco.',
     });
   }
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     ms: raw.ms,
     ack,
     referenceNumber: input.referenceNumber,
-    requestXml: xml,
-    rawXml: raw.xml,
+    requestXml: redactXml(xml),
+    rawXml: redactXml(raw.xml),
   });
 }

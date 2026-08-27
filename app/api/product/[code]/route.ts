@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { postXml } from '@/lib/novexco-client';
+import { postXml, redactXml } from '@/lib/novexco-client';
 import { parseProductDetail } from '@/lib/novexco-adapter';
 import { buildProductsXml } from '@/lib/requests';
 
@@ -26,7 +26,7 @@ export async function GET(
 
   if (parsed.fault) {
     return NextResponse.json(
-      { fault: parsed.fault, ms: raw.ms, requestXml: xml },
+      { fault: parsed.fault, ms: raw.ms, requestXml: redactXml(xml) },
       { status: 502 }
     );
   }
@@ -40,7 +40,7 @@ export async function GET(
   return NextResponse.json({
     product: parsed.product,
     ms: raw.ms,
-    requestXml: xml,
-    rawXml: raw.xml,
+    requestXml: redactXml(xml),
+    rawXml: redactXml(raw.xml),
   });
 }

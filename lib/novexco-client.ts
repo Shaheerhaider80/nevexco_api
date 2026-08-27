@@ -25,6 +25,22 @@ function config() {
   return { baseUrl, apiKey, customer, password };
 }
 
+/**
+ * Strip the account credentials out of an XML document before it leaves the
+ * server.
+ *
+ * Every envelope carries CUSTOMER and PASSWORD, and the routes hand back the
+ * request they sent so the explorer can show the real shape of a call. Without
+ * this the password that authorises orders and invoice access is delivered to
+ * the browser on every single request.
+ */
+export function redactXml(xml: string): string {
+  return xml.replace(
+    /<((?:\w+:)?(?:CUSTOMER|PASSWORD))>[\s\S]*?<\/\1>/gi,
+    '<$1>********</$1>'
+  );
+}
+
 /** Escape the five XML entities. Product codes and PO numbers are user-supplied. */
 export function esc(value: unknown): string {
   return String(value ?? '')
