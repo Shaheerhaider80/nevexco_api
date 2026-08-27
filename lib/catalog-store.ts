@@ -5,16 +5,45 @@
  * possible against products we have already fetched. This store accumulates
  * pages as they are synced and derives the category index from them.
  *
- * A JSON file is deliberate: this is a prototype, and the production target is
- * Wix Data rather than a database chosen here. Records are trimmed to keep the
- * whole catalog well under ~15MB - full detail is fetched live per product.
+ * Two backends, chosen by whether a Blob token is present:
+ *
+ *  - Vercel Blob when deployed. A serverless filesystem is read-only, so the
+ *    previous fs.writeFile threw EROFS and the sync route answered with a
+ *    0-byte 500. Even in /tmp it would not survive, because each invocation can
+ *    land on a different instance.
+ *  - A JSON file locally, so development needs no token and works offline.
+ *
+ * Records are trimmed to keep the whole catalog well under ~15MB - full detail
+ * is fetched live per product.
  */
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import {
+  BlobNotFoundError,
+  BlobPreconditionFailedError,
+  del,
+  get,
+  head,
+  put,
+} from '@vercel/blob';
 import type { CategoryRef, ProductSummary } from './novexco-adapter';
 
-const STORE_PATH = path.join(process.cwd(), 'data', 'catalog.json');
+const BLOB_PATH = 'catalog.json';
+const FILE_PATH = path.join(process.cwd(), 'data', 'catalog.json');
+
+/**
+ * The catalog holds product names, codes, brands and image URLs - the same data
+ * a storefront shows anyone. No prices (deliberately never cached), no orders,
+ * no personal data. Switch to 'private' if your plan supports it and you would
+ * rather the blob URL not be readable.
+ */
+const BLOB_ACCESS = 'public' as const;
+
+/** Vercel injects this when a Blob store is linked to the project. */
+function usingBlob(): boolean {
+  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+}
 
 export interface CatalogStore {
   /** Product code -> summary. */
@@ -36,10 +65,25 @@ const EMPTY: CatalogStore = {
   lastSyncedAt: null,
 };
 
-/** Reads persist as-is; a missing or corrupt file yields an empty store. */
-export async function readStore(): Promise<CatalogStore> {
+/**
+ * A store plus the version it was read at. The version is the blob ETag, used
+ * to make the read-modify-write in mergePage conditional.
+ */
+interface Snapshot {
+  store: CatalogStore;
+  version?: string;
+}
+
+/**
+ * The full catalog approaches 6MB, and the product grid reads it on every page
+ * view. Holding the last copy against its ETag turns an unchanged read into one
+ * small metadata call instead of a 6MB download. Serverless instances are
+ * reused, so this survives between requests often enough to matter.
+ */
+let cached: { store: CatalogStore; version: string } | null = null;
+
+function parseStore(raw: string): CatalogStore {
   try {
-    const raw = await fs.readFile(STORE_PATH, 'utf8');
     const parsed = JSON.parse(raw) as Partial<CatalogStore>;
     return { ...EMPTY, ...parsed };
   } catch {
@@ -47,9 +91,80 @@ export async function readStore(): Promise<CatalogStore> {
   }
 }
 
-async function writeStore(store: CatalogStore): Promise<void> {
-  await fs.mkdir(path.dirname(STORE_PATH), { recursive: true });
-  await fs.writeFile(STORE_PATH, JSON.stringify(store), 'utf8');
+async function readSnapshot(): Promise<Snapshot> {
+  if (!usingBlob()) {
+    try {
+      return { store: parseStore(await fs.readFile(FILE_PATH, 'utf8')) };
+    } catch {
+      return { store: { ...EMPTY } };
+    }
+  }
+
+  let version: string;
+  try {
+    version = (await head(BLOB_PATH)).etag;
+  } catch (err) {
+    // Nothing synced yet is the normal first-run state, not a failure.
+    if (err instanceof BlobNotFoundError) return { store: { ...EMPTY } };
+    throw err;
+  }
+
+  if (cached?.version === version) return { store: cached.store, version };
+
+  // useCache: false reads from origin rather than the CDN, so a page written a
+  // moment ago is never missed by the next page of the same sync run.
+  const result = await get(BLOB_PATH, { access: BLOB_ACCESS, useCache: false });
+  if (!result || result.statusCode !== 200) return { store: { ...EMPTY } };
+
+  const store = parseStore(await new Response(result.stream).text());
+  cached = { store, version };
+  return { store, version };
+}
+
+/**
+ * Persist the store. `version` makes the write conditional: if the blob changed
+ * since it was read, the write is rejected rather than silently discarding the
+ * other page. Returns the new version.
+ */
+async function writeSnapshot(
+  store: CatalogStore,
+  version?: string
+): Promise<string | undefined> {
+  const body = JSON.stringify(store);
+
+  if (!usingBlob()) {
+    // Writing to disk when deployed is what produced the original 0-byte 500,
+    // so say which setup step is missing rather than failing as EROFS again.
+    if (process.env.VERCEL) {
+      throw new Error(
+        'No Blob store is linked to this deployment, and the filesystem is ' +
+          'read-only. Create a Blob store in the Vercel project (Storage tab) ' +
+          'and redeploy so BLOB_READ_WRITE_TOKEN is available.'
+      );
+    }
+    await fs.mkdir(path.dirname(FILE_PATH), { recursive: true });
+    await fs.writeFile(FILE_PATH, body, 'utf8');
+    return undefined;
+  }
+
+  const result = await put(BLOB_PATH, body, {
+    access: BLOB_ACCESS,
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: 'application/json',
+    // Reads that must be current pass useCache: false, so this only bounds how
+    // long a direct URL hit can lag. One minute is the floor the API allows.
+    cacheControlMaxAge: 60,
+    ...(version ? { ifMatch: version } : {}),
+  });
+
+  cached = { store, version: result.etag };
+  return result.etag;
+}
+
+/** Reads persist as-is; a missing or corrupt store yields an empty one. */
+export async function readStore(): Promise<CatalogStore> {
+  return (await readSnapshot()).store;
 }
 
 export interface MergeResult {
@@ -58,18 +173,13 @@ export interface MergeResult {
   store: CatalogStore;
 }
 
-/**
- * Merge one synced page into the store. Products upsert by code, so re-syncing
- * an offset is harmless.
- */
-export async function mergePage(
+function applyPage(
+  store: CatalogStore,
   products: ProductSummary[],
   categories: CategoryRef[],
   reportedTotal: number,
   offset: number
-): Promise<MergeResult> {
-  const store = await readStore();
-
+): MergeResult {
   let added = 0;
   for (const product of products) {
     if (!store.products[product.code]) added += 1;
@@ -91,12 +201,56 @@ export async function mergePage(
   }
   store.lastSyncedAt = new Date().toISOString();
 
-  await writeStore(store);
   return { added, newCategories, store };
 }
 
+/**
+ * Merge one synced page into the store. Products upsert by code, so re-syncing
+ * an offset is harmless.
+ *
+ * The read-modify-write is retried when another sync writes first, so two tabs
+ * syncing at once cannot drop each other's pages.
+ */
+export async function mergePage(
+  products: ProductSummary[],
+  categories: CategoryRef[],
+  reportedTotal: number,
+  offset: number
+): Promise<MergeResult> {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const { store, version } = await readSnapshot();
+    const merged = applyPage(store, products, categories, reportedTotal, offset);
+
+    try {
+      await writeSnapshot(merged.store, version);
+      return merged;
+    } catch (err) {
+      if (!(err instanceof BlobPreconditionFailedError)) throw err;
+      // Someone else wrote first. Drop the stale copy and rebuild on theirs.
+      cached = null;
+    }
+  }
+
+  throw new Error(
+    'Could not save the catalog: it kept being updated by another sync. Try again.'
+  );
+}
+
 export async function clearStore(): Promise<void> {
-  await writeStore({ ...EMPTY });
+  cached = null;
+
+  if (!usingBlob()) {
+    await fs.mkdir(path.dirname(FILE_PATH), { recursive: true });
+    await fs.writeFile(FILE_PATH, JSON.stringify(EMPTY), 'utf8');
+    return;
+  }
+
+  try {
+    await del(BLOB_PATH);
+  } catch (err) {
+    // Already gone is the desired end state.
+    if (!(err instanceof BlobNotFoundError)) throw err;
+  }
 }
 
 /** Products carrying a given leaf category code. */

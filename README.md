@@ -29,6 +29,11 @@ Every Novexco call is proxied through this app's server routes. The key and
 password authorize real orders and invoice access, so they never reach the
 browser.
 
+The routes return the request XML they sent so the explorer can show the real
+shape of a call. Because every SOAP envelope carries `CUSTOMER` and `PASSWORD`
+in its body, that XML is passed through `redactXml()` first — otherwise the
+account password would be delivered to the browser on every request.
+
 ---
 
 ## What the API actually looks like
@@ -141,9 +146,30 @@ responses nest too deeply for regex parsing to be safe.
 
 ### Caching policy
 
-Catalog data is cached in `data/catalog.json` (gitignored, ~294 bytes per product,
-so the full catalog lands around 6 MB). **Price and inventory are never cached** —
-they are fetched live on every product view, because a stale price is a mis-sale.
+Catalog data is cached at ~294 bytes per product, so the full catalog lands
+around 6 MB. **Price and inventory are never cached** — they are fetched live on
+every product view, because a stale price is a mis-sale.
+
+The cache has two backends, picked by whether `BLOB_READ_WRITE_TOKEN` is set:
+
+| Where | Backend | Why |
+|---|---|---|
+| Local | `data/catalog.json` (gitignored) | No token needed; works offline. |
+| Deployed | Vercel Blob (`catalog.json`) | A serverless filesystem is read-only. |
+
+Reads go through `head()` first and only download the body when the ETag has
+changed, so an unchanged read costs one metadata call rather than 6 MB. Writes
+are conditional on that ETag, so two tabs syncing at once cannot drop each
+other's pages.
+
+## Deploying
+
+Create a Blob store on the Vercel project (Storage tab) and redeploy — that is
+what supplies `BLOB_READ_WRITE_TOKEN`. Without it the catalog sync fails,
+because it falls back to writing a file onto a read-only filesystem.
+
+Set `NOVEXCO_BASE_URL`, `NOVEXCO_API_KEY`, `NOVEXCO_CUSTOMER` and
+`NOVEXCO_PASSWORD` as project environment variables too.
 
 ---
 
