@@ -1,26 +1,404 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
+/*
+ * Palette is defined light-first on :root, with dark values layered on top.
+ * Every colour has a light definition so nothing depends on a media query.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --surface-2: #eef1f6;
+  --surface-3: #e4e9f0;
+  --border: #dde3ea;
+  --text: #14181d;
+  --text-dim: #5a6472;
+  --accent: #1a5fd0;
+  --accent-hover: #164fae;
+  --accent-fg: #ffffff;
+  --accent-soft: #e8f0fe;
+  --ok: #0f7a3d;
+  --ok-bg: #e6f5ec;
+  --warn: #8a5300;
+  --warn-bg: #fdf1de;
+  --err: #b3261e;
+  --err-bg: #fdecea;
+  --code-bg: #f5f6f8;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 3px rgba(16, 24, 40, 0.06);
+  --shadow-lg: 0 4px 12px rgba(16, 24, 40, 0.08), 0 2px 4px rgba(16, 24, 40, 0.04);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme='light']) {
+    --bg: #0e1116;
+    --surface: #161b22;
+    --surface-2: #1d232c;
+    --surface-3: #262e39;
+    --border: #2b323b;
+    --text: #e8eaed;
+    --text-dim: #9aa4b0;
+    --accent: #4d8ff5;
+    --accent-hover: #6ba2f7;
+    --accent-fg: #08131f;
+    --accent-soft: #16243a;
+    --ok: #56d68a;
+    --ok-bg: #10301f;
+    --warn: #e3b341;
+    --warn-bg: #33280d;
+    --err: #ff7b72;
+    --err-bg: #3a1614;
+    --code-bg: #12161b;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 4px 14px rgba(0, 0, 0, 0.45);
   }
 }
 
+:root[data-theme='dark'] {
+  --bg: #0e1116;
+  --surface: #161b22;
+  --surface-2: #1d232c;
+  --surface-3: #262e39;
+  --border: #2b323b;
+  --text: #e8eaed;
+  --text-dim: #9aa4b0;
+  --accent: #4d8ff5;
+  --accent-hover: #6ba2f7;
+  --accent-fg: #08131f;
+  --accent-soft: #16243a;
+  --ok: #56d68a;
+  --ok-bg: #10301f;
+  --warn: #e3b341;
+  --warn-bg: #33280d;
+  --err: #ff7b72;
+  --err-bg: #3a1614;
+  --code-bg: #12161b;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Utility layer kept small and semantic; Tailwind covers the rest. */
+.surface {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.raised {
+  box-shadow: var(--shadow);
+}
+
+.dim {
+  color: var(--text-dim);
+}
+
+.link {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+
+.chip-ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+  border-color: transparent;
+}
+
+.chip-warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border-color: transparent;
+}
+
+.chip-err {
+  background: var(--err-bg);
+  color: var(--err);
+  border-color: transparent;
+}
+
+.chip-accent {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: transparent;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 550;
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    transform 0.08s ease;
+  text-align: center;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: transparent;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.btn-danger {
+  background: var(--err);
+  color: #fff;
+  border-color: transparent;
+}
+
+.btn-danger:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim);
+  padding: 7px 10px;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.btn-lg {
+  padding: 12px 22px;
+  font-size: 15px;
+  border-radius: 11px;
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--text-dim);
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 5px;
+}
+
+/* Quantity stepper used on product and basket rows. */
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.stepper button {
+  width: 36px;
+  height: 36px;
+  font-size: 17px;
+  line-height: 1;
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.stepper button:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+
+.stepper button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.stepper input {
+  width: 54px;
+  height: 36px;
+  text-align: center;
+  border: none;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stepper input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+pre.xml {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow-x: auto;
+  white-space: pre;
+  max-height: 420px;
+}
+
+table.grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+table.grid th,
+table.grid td {
+  text-align: left;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+table.grid tr:last-child td {
+  border-bottom: none;
+}
+
+table.grid th {
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 12.5px;
+  background: var(--surface-2);
+}
+
+/* Wide tables scroll inside their own container, never the page. */
+.scroll-x {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+/* Card that is also a link — used for the home tiles and product grid. */
+.tile {
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  transition:
+    border-color 0.14s ease,
+    box-shadow 0.14s ease,
+    transform 0.1s ease;
+}
+
+.tile:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+.thumb {
+  background: var(--surface-2);
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.thumb img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .thumb img {
+    mix-blend-mode: normal;
+  }
+}
+
+:root[data-theme='dark'] .thumb img {
+  mix-blend-mode: normal;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.65s linear infinite;
+  opacity: 0.7;
 }
