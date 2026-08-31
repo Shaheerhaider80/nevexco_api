@@ -1,6 +1,3 @@
-this is shaheer
-
-
 # Novexco API — Explorer & Storefront Prototype
 
 A standalone Next.js app that implements every working endpoint of the **Novexco
